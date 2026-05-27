@@ -23,7 +23,7 @@ python train_mexconn.py --domain urocell_3 test
 
 Compute encoder channel importance:
 ```
-python channel_ablation.py --data_root data --domain drosophila-vnc --model_path ./models/drosophila/model.pth --batch_size 8 --top_k 100 --device cuda
+python channel_ablation.py --data_root data --domain drosophila-vnc --model_path <path of saved model> --batch_size 8 --top_k 100 --device cuda
 
 ```
 Detailed annotations are provided in the code for each step of the interpretability analysis.
