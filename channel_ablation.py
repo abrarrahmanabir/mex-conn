@@ -9,16 +9,58 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from model import MultiHeadUNet
 from matplotlib_venn import venn3
-from train import MultiOrganelleSegDataset
+# from train import MultiOrganelleSegDataset
 from sklearn.metrics import jaccard_score, f1_score, recall_score
 from sklearn.metrics import mutual_info_score
+
+class MultiOrganelleSegDataset(Dataset):
+
+    def __init__(self, domain_path: str, split: str, organelles: tuple,
+                 patch_size: int = 256, stride: int = 128):
+        self.raw_dir   = os.path.join(domain_path, split, "raw")
+        self.mask_dirs = {org: os.path.join(domain_path, split, org) for org in organelles}
+        self.organelles = organelles
+        self.patch_size = patch_size
+        self.stride     = stride
+        self.to_tensor  = T.ToTensor()
+
+        self.filenames = sorted(os.listdir(self.raw_dir))
+        self.patches   = []
+        for img_idx, fname in enumerate(self.filenames):
+            img = Image.open(os.path.join(self.raw_dir, fname))
+            w, h = img.size
+            for y in range(0, h - patch_size + 1, stride):
+                for x in range(0, w - patch_size + 1, stride):
+                    self.patches.append((img_idx, y, x))
+
+        # cprint(f"    [{split:>5}]  {len(self.filenames)} images → {len(self.patches)} patches", C.WHITE)
+
+    def __len__(self):
+        return len(self.patches)
+
+    def __getitem__(self, idx):
+        img_idx, y, x = self.patches[idx]
+        fname = self.filenames[img_idx]
+        ps = self.patch_size
+
+        img  = Image.open(os.path.join(self.raw_dir, fname)).convert("L")
+        crop = img.crop((x, y, x + ps, y + ps))
+        img_t = self.to_tensor(crop)          # (1, H, W) in [0, 1]
+
+        masks = []
+        for org in self.organelles:
+            mask = Image.open(os.path.join(self.mask_dirs[org], fname)).convert("L")
+            m = self.to_tensor(mask.crop((x, y, x + ps, y + ps)))
+            masks.append((m > 0.5).float())   # binarize
+        return img_t, torch.cat(masks, dim=0)  # (C_org, H, W)
+
 
 
 # For organelles, keep the one to train and comment out the rest two
 
-ORGANELLES = ("fusiform-vesicles", "mitochondria", "lysosomes")    # for urocell
+# ORGANELLES = ("fusiform-vesicles", "mitochondria", "lysosomes")    # for urocell
 ORGANELLES = ("membranes", "mitochondria", "synapses")             # for drosophila
-ORGANELLES =  ("membranes", "mitochondria", "vesicles")            # for multiclass epfl
+# ORGANELLES =  ("membranes", "mitochondria", "vesicles")            # for multiclass epfl
 DOMAIN = None
 
 def dice_coef(pred, target, smooth=1.):
